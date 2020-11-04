@@ -1,9 +1,13 @@
-from myplot import *
-from functions import *
+import sys
+
+# oscillation module (class Model)
+sys.path.append('/home/sagitta/mymodules')
 from oscillation import *
 
-from copy import deepcopy
+sys.path.append('/home/sagitta/mymodules/myplot')
+from myplot import *
 
+from copy import deepcopy
 
 ## to enable backslash e.g. in \text
 # import matplotlib as mpl
@@ -20,8 +24,13 @@ target_p = 1.5 * 1e33
 
 # energy points in MeV
 # Epoints = np.arange(0.1,10,5000)
-Epoints = np.linspace(0.1,10,5000)
+Epoints = np.linspace(0.1,10,6000)
+# Epoints = np.linspace(0.1,10,5000)
 
+# masses in MeV
+m_n = 939.57 # neutron
+m_p = 938 # proton
+m_e = 0.511 # positron
 # threshold of IBD in MeV
 thr_ibd = m_n - m_p + m_e
 
@@ -47,7 +56,8 @@ LABELS = {
 
 COLORS = {
 'unosc': 'k', 'osc0': 'g', 'oscNO': 'b', 'oscIO': 'r',
-'osc': 'k'
+'osc': 'k',
+'data': 'k'
 }
 
 # ----------------------------------------------------------------------------------------------
@@ -74,6 +84,8 @@ def plot_osc_spectra(E,L,reso=0):
     spec.get_spectrum()
     # apply oscillation with NO and IO, and with theta13 = 0 for comparison
     spec.oscillate()
+    # apply det resp
+    # spec.det_response(1100)
     # smear if resolution is given
     if reso:
         spec.smear(reso)
@@ -83,13 +95,19 @@ def plot_osc_spectra(E,L,reso=0):
     # return
 
     # convert to histo
-    spec.histogramize(Nbins=100)
+    # spec.histogramize(Nbins=250,sample=False,Nev=100000)
 
+    # remove unosc
+    spec.spectra.pop('unosc')
+    spec.spectra.pop('osc0')
     mp = Plot((10,8))
+
     # plot all resulting spectra
+    # spec.plot_histos(mp)
     spec.plot_spectra(mp)
 
-    fname = 'juno_spectrum_theta13'
+    fname = 'juno_histos_theta13'
+    # fname = 'juno_spectrum_theta13'
     if reso:
         mp.fig.suptitle('Resolution {0} %'.format(reso))
         fname += '_smear{0}'.format(reso)
@@ -109,7 +127,10 @@ class Spectra():
     def __init__(self, E, L):
         ''' E: energy in MeV, L: distance in km '''
         # take energy above IBD threshold
-        self.E = E[E >= thr_ibd]
+        self.Epoints = E[E >= thr_ibd]
+        # energy points: start with MeV, later can be in p.e.
+        self.E = self.Epoints
+        self.Npe = False # we start with MeV
         # bin edges after constructing histograms will be saved here
         self.Ebinned = []
 
@@ -125,7 +146,7 @@ class Spectra():
 
     def get_spectrum(self):
         # JUNO spectrum (unoscillated)
-        self.spectra['unosc'] = target_p * sigmaIBD(self.E) * antinu_flux(self.E)
+        self.spectra['unosc'] = target_p * sigmaIBD(self.Epoints) * antinu_flux(self.Epoints)
 
 
     def oscillate(self,motypes=['NO','IO'],model=model_default):
@@ -143,16 +164,30 @@ class Spectra():
         mod0 = deepcopy(model)
         mod0.th13 = 0
 
-        pee0 = mod0.get_pee(L=self.L, E=self.E, mo='NO') # MO doesn't matter
+        pee0 = mod0.get_pee(L=self.L, E=self.Epoints, mo='NO') # MO doesn't matter for th13 = 0
         self.spectra['osc0'] = pee0*self.spectra['unosc']
 
         # oscillated flux for given mass orderings
         for mo in motypes:
-            pee = model.get_pee(L=self.L, E=self.E, mo=mo)
+            pee = model.get_pee(L=self.L, E=self.Epoints, mo=mo)
             self.spectra['osc' + mo if mo != None else 'osc'] = pee*self.spectra['unosc']
 
 
-    def smear(self, reso, sp=None):
+    def det_response(self, LY, sp=None):
+        '''
+        Convert MeV to Npe
+        LY: value of p.e./MeV @ 1 MeV
+        '''
+        spectra = self.spectra if sp == None else [sp]
+
+        for sp in spectra:
+            self.spectra[sp] = self.spectra[sp] * LY # p.e.
+
+        self.E = self.Epoints * LY # p.e.
+        self.Npe = True
+
+
+    def smear(self, reso=-1, sp=None):
         '''
         Convolve each spectrum with Gaus, The smear_gaus() function is contained
             in functions.py
@@ -164,10 +199,17 @@ class Spectra():
         '''
 
         # print 'Smearing...'
+        # OINK
+        # histos = self.histos if sp == None else [sp]
         spectra = self.spectra if sp == None else [sp]
+        # OINK
         for sp in spectra:
-            # print '...', sp
-            self.spectra[sp] = smear_gaus(self.spectra[sp], self.E, reso/100.)
+        # for sp in histos:
+            # print ('...', sp)
+            # OINK
+            # self.histos[sp] = smear_gaus(self.histos[sp], self.Ebinned, reso/100.)
+            res = -1 if self.Npe else reso/100. # -1 given to Gaus means use Npe
+            self.spectra[sp] = smear_gaus(self.spectra[sp], self.E, res)
 
 
     def plot_spectra(self,mp):
@@ -175,7 +217,7 @@ class Spectra():
         for sp in self.spectra:
             mp.ax.plot(self.E, self.spectra[sp], color=COLORS[sp], label=LABELS[sp])
 
-        mp.ax.set_xlabel('E [MeV]')
+        mp.ax.set_xlabel('Npe' if self.Npe else 'E [MeV]')
         mp.legend()
         mp.pretty()
 
@@ -191,7 +233,8 @@ class Spectra():
             print (sp)
             mp.ax.step(self.Ebinned, self.histos[sp], color=COLORS[sp], label=LABELS[sp])
 
-        mp.ax.set_xlabel('E [MeV]')
+        xlabel = 'Npe' if self.Npe else 'E [MeV]'
+        mp.ax.set_xlabel(xlabel)
         mp.legend()
         mp.pretty(large=3)
 
@@ -239,8 +282,77 @@ class Spectra():
         self.Ebinned = bin_edges[:-1]
 
 
+# -------------------------------------------------------------
+
+# energy resolution function
+def energy_reso(E, a, c):
+    return np.sqrt(a**2 * E + c**2)
+
+def gaus(x, mu, sigma, a=1):
+    ''' Gauss function '''
+    return a / sigma / np.sqrt(2*np.pi) * np.exp( -0.5 * (x-mu)**2 / sigma**2 )
 
 
+def smear_gaus(fpoints, x, reso):
+    '''
+    Smear a function at each point in x with gaus
+    fpoints: y points of the function
+    x: corresponding x points (MeV or Npe)
+    reso: energy resolution at 1 MeV (in %) for the case of MeV.
+        For the case of Npe, reso=-1 should be given
+
+    '''
+    # empty array
+    res = np.zeros(len(x))
+
+    # sum gaussian distributions along the original point for each point
+    for i in range(len(x)):
+        # current x point
+        xp = x[i]
+        #  mean = x point, amplitude -> y point at xp
+        # sigma(E) / E = reso / sqrt(E)
+        sigma = np.sqrt(xp) if reso == -1 else reso*np.sqrt(xp)
+        res += gaus(x, mu=xp*1., sigma=sigma, a=fpoints[i])
+
+    return res
+
+
+# -------------------------------------------------------------
+
+def antinu_flux(E):
+    '''
+    Reactor antineutrino flux, E in any units
+    '''
+
+    # print ('Calculating reactor flux...')
+
+    ## f: relative fission contribution (actually varies over time)
+    fU235 = 0.58
+    fPu239 = 0.3
+    fU238 = 0.07
+    fPu241 = 0.05
+
+    return fU235 * np.exp(0.870 - 0.16*E - 0.091*E**2)\
+            + fPu239 * np.exp(0.896 - 0.239*E - 0.0981*E**2)\
+            + fU238 * np.exp(0.976 - 0.162*E - 0.079*E**2)\
+            + fPu241 * np.exp(0.793 - 0.08*E - 0.1085*E**2)
+
+
+def sigmaIBD(E):
+    '''
+    Cross section of neutrino capture via IBD
+    E in MeV
+    '''
+
+    # print ('Calculating cross section...')
+
+    # total energy of positron
+    Ee = E - (m_n - m_p)
+
+    # Ee^2 = (pe c)^2 + (me c^2)^2
+    pe = np.sqrt(Ee**2 - m_e**2) # momentum of positron
+
+    return 0.0952 * Ee * pe * 1e-42 #cm^2
 
 # -------------------------------------------------------------
 
@@ -312,14 +424,14 @@ def plot_P_vs_E(E,L,mod=model_default):
 
 if __name__ == '__main__':
 
-    plot_P_vs_E(Epoints, Ljuno)
+    # plot_P_vs_E(Epoints, Ljuno)
     # plot_flux_sigma(Epoints)
 
     ## JUNO spectrum without smearing
     # plot_osc_spectra(Epoints, Ljuno)
 
     ## save JUNO spectra PDFs for 3% resolution
-    # plot_osc_spectra(Epoints, Ljuno, 3)
+    plot_osc_spectra(Epoints, Ljuno, 3)
 
 
     ## plot JUNO spectrum for different resolutions

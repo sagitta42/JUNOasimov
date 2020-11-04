@@ -2,8 +2,8 @@
 
 For now, an unorganized collection of code, since I'm not sure how to structure it yet.
 
-# Syntax
+# Example
 
 ```console
-python juno_fit.py Nev [fit_method]
+python juno_fit.py Nev=10000 fit_method=chi2 data_method=sample save
 ```
