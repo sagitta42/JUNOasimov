@@ -6,7 +6,7 @@ import sys
 # import numpy as np
 import pandas as pd
 
-save = 'save' in sys.argv
+# save = 'save' in sys.argv
 
 class Plot:
     def __init__(self,figsize,n=1,sharex=False):
@@ -28,7 +28,7 @@ class Plot:
             rect_histy = [left + width + spacing, bottom, 0.2, height]
 
             # start with a rectangular Figure
-            self.fig = plt.figure(figsize=(8, 8))
+            self.fig = plt.figure(figsize=figsize)
             # main axis (square plot in the middle)
             self.axes = [plt.axes(rect_scatter)]
             self.axes[0].tick_params(direction='in', top=True, right=True)
@@ -38,16 +38,23 @@ class Plot:
             # plot at the side
             self.axes.append(plt.axes(rect_histy))
             self.axes[2].tick_params(direction='in', labelleft=False)
-        else:
+        elif type(n) == int:
             fig, ax = plt.subplots(n,figsize=figsize, sharex=sharex)
             self.fig = fig
             # convenient if only have one subplot (not ty type axes[0] all the time)
             self.ax = ax
             # array of all our axes; new axes get added here too (e.g. two subplots, one has 2 y axes, means in total 5 axes in the list)
             self.axes = list(ax) if n > 1 else [ax]
+        else:
+            self.fig = plt.figure(figsize=figsize)
+
+            # e.g.[211, 223, 224]
+            self.axes = []
+            for subp in n:
+                self.axes.append(plt.subplot(subp))
 
 
-    def legend(self, out=False, ncol=1, title=None, pos=None):
+    def legend(self, out=False, ncol=1, title=None, pos=None, axes=None):
         '''
         Create a customized legend.
 
@@ -69,9 +76,10 @@ class Plot:
             # draw legend on each axis
             # in case these are not subplots, but one plot with two y axes, legends might crash
             # -> choose given location
-            for i in range(len(self.axes)):
+            indices = range(len(self.axes)) if axes == None else axes
+            for i in indices:
                 # loc = pos[i] if pos else None
-                if pos != None: loc = pos if type(pos) == int else pos[i]
+                if pos != None: loc = pos[i] if type(pos) == list else pos
                 else: loc = None
 
                 # loc = pos if type(pos) pos[i] if pos else None
@@ -157,7 +165,7 @@ class Plot:
 
         ## remove white borders around the plot
         # self.fig.tight_layout()
-        if type(self.n) == int:
+        if type(self.n) != str:
             self.fig.tight_layout(rect=[0,0,1,0.97])
 
 
@@ -168,9 +176,9 @@ class Plot:
         name [string]: name of the figure to be saved (with extension)
         '''
         #self.pretty(2)
-        print ('Image:', name)
+        print('Image:', name)
 
-        if save:
+        if 'save' in sys.argv:
             if name:
                 self.fig.savefig(name)
                 print ('(saved)')
