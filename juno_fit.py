@@ -26,6 +26,8 @@ all_params = ['th12', 'th13', 'a', 'b']
 
 #free_params = ['th12', 'th13', 'a', 'b']
 free_params = ['th12', 'a', 'b']
+#free_params = ['th13', 'a']
+#free_params = ['th12', 'a']
 # free_params = ['mu', 'sig', 'eres', 'b']
 # free_params = ['mu', 'sig', 'a', 'b']
 # free_params = ['mu', 'eres', 'b']
@@ -72,7 +74,7 @@ if len(sys.argv) == 1:
     print ('\t Nbins: number of bins (default 250)')
     sys.exit(1)
 
-user_input = user_dict()
+user_input = user_dict()    
 
 # ------------------------------------------------------------------
 
@@ -94,8 +96,9 @@ Nbins = int(user_input['Nbins'])
 
 LY = 1100 # p.e./MeV @ 1 MeV
 # Ereso = 1/np.sqrt(LY)*100 # %, assumed resolution
-apar = 1/np.sqrt(LY) # MeV^(1/2)
-bpar = 0.05 # no units
+#apar = 1/np.sqrt(LY) # MeV^(1/2)
+apar = 2.9/100 # MeV^{1/2}, 2.9%
+bpar = 0.8/100 # no units, 0.8%
 
 # ------------------------------------------------------------------
 # standard oscillation model is already initialized in juno_osc.py as model_default
@@ -284,7 +287,7 @@ def juno_fit(fit_method, sample='sample', plot=False):
     #mn.minos(sigma=2)
     #print ('Running time:', time.time() - start_time, 's')
     
-    bins_cont = 10
+    bins_cont = 15
     print('-> Contours with {0} bins'.format(bins_cont))
     # run contours for every pair of variables
     for vars in itertools.combinations(free_params, 2):
