@@ -63,7 +63,7 @@ COLORS = {
 # ----------------------------------------------------------------------------------------------
 
 
-def plot_osc_spectra(E,L,reso=0):
+def plot_osc_spectra(E,L,a=0):
     '''
     Plot JUNO spectrum
     1) unoscillated
@@ -71,9 +71,9 @@ def plot_osc_spectra(E,L,reso=0):
     3) oscillated with NO
     3) oscillated with IO
 
-    smear: energy resolution in percentage
-            if non-zero, Gaussian smear will be applied
-            otherwise, no smearing is applied
+    a: energy resolution (e.g. 0.03 for 3%)
+        if non-zero, Gaussian smear will be applied
+        otherwise, no smearing is applied
     '''
 
     print ('###### JUNO spectra')
@@ -87,8 +87,8 @@ def plot_osc_spectra(E,L,reso=0):
     # apply det resp
     # spec.det_response(1100)
     # smear if resolution is given
-    if reso:
-        spec.smear(reso)
+    if a:
+        spec.smear(a)
 
     # get spectra PDFs
     # spec.get_pdfs()
@@ -108,9 +108,9 @@ def plot_osc_spectra(E,L,reso=0):
 
     fname = 'juno_histos_theta13'
     # fname = 'juno_spectrum_theta13'
-    if reso:
-        mp.fig.suptitle('Resolution {0} %'.format(reso))
-        fname += '_smear{0}'.format(reso)
+    if a:
+        mp.fig.suptitle('Resolution {0} %'.format(int(a*100)))
+        fname += '_smear{0}'.format(int(a*100))
 
     mp.figure(fname + '.png')
 
@@ -143,6 +143,13 @@ class Spectra():
         # binned histograms
         self.histos = {}
 
+    def make_gaus(self, mu, sig):
+        '''
+        Debug mode: rather than fitting the complex JUNO spectrum,
+            fit a normal distribution to figure out other issues/bugs
+        '''
+
+        self.spectra['oscGaus'] = gaus(self.Epoints, mu, sig, 1)
 
     def get_spectrum(self):
         # JUNO spectrum (unoscillated)
@@ -187,11 +194,15 @@ class Spectra():
         self.Npe = True
 
 
-    def smear(self, reso=-1, sp=None):
+    def smear(self, a, b=0, c=0, sp=None):
         '''
         Convolve each spectrum with Gaus, The smear_gaus() function is contained
             in functions.py
-        reso: energy resolution in %
+
+        a: energy resolution stochastic term
+        b: energy resolution non-linearity term
+        c: dark noise term
+
         [!] not implemented: normalizing to the same number of events
         Is used when constructing PDFs, but there it doesn't matter
             cause they get normalized to 1 anyway, but for actual spectra
@@ -208,14 +219,15 @@ class Spectra():
             # print ('...', sp)
             # OINK
             # self.histos[sp] = smear_gaus(self.histos[sp], self.Ebinned, reso/100.)
-            res = -1 if self.Npe else reso/100. # -1 given to Gaus means use Npe
-            self.spectra[sp] = smear_gaus(self.spectra[sp], self.E, res)
+            # a=0 given to Gaus means use Npe
+            self.spectra[sp] = smear_gaus(self.spectra[sp], self.E, a, b, c)
 
 
     def plot_spectra(self,mp):
         ''' Plot continuous spectra on a given Myplot object mp'''
         for sp in self.spectra:
-            mp.ax.plot(self.E, self.spectra[sp], color=COLORS[sp], label=LABELS[sp])
+            mp.ax.plot(self.E, self.spectra[sp], color=COLORS[sp] if sp in COLORS else None,\
+                label=LABELS[sp] if sp in LABELS else sp)
 
         mp.ax.set_xlabel('Npe' if self.Npe else 'E [MeV]')
         mp.legend()
@@ -231,7 +243,9 @@ class Spectra():
         order = self.histos if order == None else order
         for sp in order:
             print (sp)
-            mp.ax.step(self.Ebinned, self.histos[sp], color=COLORS[sp], label=LABELS[sp])
+            mp.ax.step(self.Ebinned, self.histos[sp],\
+                color=COLORS[sp] if sp in COLORS else None,\
+                label=LABELS[sp] if sp in LABELS else sp)
 
         xlabel = 'Npe' if self.Npe else 'E [MeV]'
         mp.ax.set_xlabel(xlabel)
@@ -282,18 +296,22 @@ class Spectra():
         self.Ebinned = bin_edges[:-1]
 
 
+
+
+
 # -------------------------------------------------------------
 
 # energy resolution function
-def energy_reso(E, a, c):
-    return np.sqrt(a**2 * E + c**2)
+def energy_reso(E, a, b, c):
+    return np.sqrt(a**2 * E + b**2 * E**2 + c**2)
 
-def gaus(x, mu, sigma, a=1):
+
+def gaus(x, mu, sigma, a):
     ''' Gauss function '''
     return a / sigma / np.sqrt(2*np.pi) * np.exp( -0.5 * (x-mu)**2 / sigma**2 )
 
 
-def smear_gaus(fpoints, x, reso):
+def smear_gaus(fpoints, x, a, b=0, c=0):
     '''
     Smear a function at each point in x with gaus
     fpoints: y points of the function
@@ -311,7 +329,8 @@ def smear_gaus(fpoints, x, reso):
         xp = x[i]
         #  mean = x point, amplitude -> y point at xp
         # sigma(E) / E = reso / sqrt(E)
-        sigma = np.sqrt(xp) if reso == -1 else reso*np.sqrt(xp)
+        sigma = np.sqrt(xp) if a == 0 else energy_reso(xp, a,b,c)
+        # sigma = np.sqrt(xp) if reso == -1 else reso*np.sqrt(xp)
         res += gaus(x, mu=xp*1., sigma=sigma, a=fpoints[i])
 
     return res
